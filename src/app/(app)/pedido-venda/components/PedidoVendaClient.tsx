@@ -30,6 +30,7 @@ export default function PedidoVendaClient({
   const [selectedProductData, setSelectedProductData] = useState<any>(null)
   const [alternativeProduct, setAlternativeProduct] = useState<any>(null)
   const [complementaryProduct, setComplementaryProduct] = useState<any>(null)
+  const [prevencidoProduct, setPrevencidoProduct] = useState<any>(null)
   const [isAiLoading, setIsAiLoading] = useState(false)
   
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -105,12 +106,28 @@ export default function PedidoVendaClient({
           setComplementaryProduct(comp)
         })())
 
+        // Verifica se o item principal tem versão prevencido
+        if (currentProd.prevencido_disponivel > 0) {
+          const dscPrev = currentProd.desconto_prevencido || 0
+          const discountedPrice = currentProd.preco_venda * (1 - dscPrev / 100)
+          setPrevencidoProduct({
+            ...currentProd,
+            preco_cheio: currentProd.preco_venda,
+            preco_venda: discountedPrice,
+            desconto_aplicado: dscPrev,
+            is_prevencido: true
+          })
+        } else {
+          setPrevencidoProduct(null)
+        }
+
         await Promise.allSettled(promises)
         setIsAiLoading(false)
       } else {
         setSelectedProductData(null)
         setAlternativeProduct(null)
         setComplementaryProduct(null)
+        setPrevencidoProduct(null)
         setIsAiLoading(false)
       }
     }
@@ -166,6 +183,14 @@ export default function PedidoVendaClient({
     }
   }
 
+  const handleSelectPrevencido = () => {
+    if (!prevencidoProduct) return
+    const success = addToCartProduct(prevencidoProduct, 1)
+    if (success) {
+      setPrevencidoProduct(null)
+    }
+  }
+
   const handleSelectComplementary = () => {
     if (!complementaryProduct) return
     const success = addToCartProduct(complementaryProduct, 1)
@@ -181,6 +206,7 @@ export default function PedidoVendaClient({
     setQty(1)
     setAlternativeProduct(null)
     setComplementaryProduct(null)
+    setPrevencidoProduct(null)
     setIsAiLoading(false)
   }
 
@@ -348,8 +374,35 @@ export default function PedidoVendaClient({
             </div>
 
             {/* Suggestions Rendered Below the Form so it doesn't push it down */}
-            {(alternativeProduct || complementaryProduct || isAiLoading || selectedProductData?.subgrupo?.toUpperCase().includes('PBM')) && (
+            {(prevencidoProduct || alternativeProduct || complementaryProduct || isAiLoading || selectedProductData?.subgrupo?.toUpperCase().includes('PBM')) && (
               <div className="mt-4 flex flex-col gap-2 w-full">
+                {selectedProductData?.prevencido_disponivel > 0 && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-[var(--radius-md)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 animate-in fade-in slide-in-from-top-2 border-dashed shadow-md border-red-300">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-red-700 uppercase tracking-wider flex items-center gap-1">
+                        ⚠️ ALERTA: PRODUTO EM OFERTA (PREVENCIDO)
+                      </span>
+                      <span className="text-sm font-medium text-red-900">{selectedProductData.descricao}</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-xs text-red-700/60 line-through">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedProductData.preco_venda)}
+                        </span>
+                        <span className="text-xs font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded">
+                          -{selectedProductData.desconto_prevencido || 0}% OFF
+                        </span>
+                        <span className="text-sm font-bold text-red-700 ml-1">
+                          {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedProductData.preco_venda * (1 - (selectedProductData.desconto_prevencido || 0) / 100))}
+                        </span>
+                      </div>
+                    </div>
+                    {prevencidoProduct && (
+                      <Button type="button" size="sm" onClick={handleSelectPrevencido} className="bg-red-600 hover:bg-red-700 text-white border-none h-8 px-4 text-xs font-semibold rounded-full shadow-sm shrink-0">
+                        Adicionar por {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(prevencidoProduct.preco_venda)}
+                      </Button>
+                    )}
+                  </div>
+                )}
+
                 {selectedProductData?.subgrupo?.toUpperCase().includes('PBM') && (
                   <div className="bg-emerald-500 text-white text-xs font-bold px-3 py-1.5 rounded-[var(--radius-md)] self-start uppercase tracking-wider shadow-sm flex items-center gap-1.5 animate-in fade-in slide-in-from-top-2">
                     🏷️ Encontrado no perfil de benefícios: {selectedProductData.subgrupo}
@@ -383,9 +436,9 @@ export default function PedidoVendaClient({
                     <div className="flex flex-col flex-1 pb-2 sm:pb-0">
                       <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1 ${complementaryProduct.is_prevencido ? 'text-orange-600' : 'text-orange-700'}`}>
                         {complementaryProduct.is_prevencido ? (
-                          <><Sparkles className="w-3 h-3" /> Oferta Especial: Vencimento Próximo</>
+                          <><Sparkles className="w-3 h-3" /> SUGESTÃO DA IA: VENCIMENTO PRÓXIMO</>
                         ) : (
-                          <><Sparkles className="w-3 h-3" /> Leve Também (IA Farmacêutica)</>
+                          <><Sparkles className="w-3 h-3" /> SUGESTÃO DA IA: LEVE TAMBÉM</>
                         )}
                       </span>
                       <span className="text-sm font-medium text-orange-900 line-clamp-1">{complementaryProduct.descricao}</span>
