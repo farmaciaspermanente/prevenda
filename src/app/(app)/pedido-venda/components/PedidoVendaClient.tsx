@@ -136,7 +136,14 @@ export default function PedidoVendaClient({
   }, [selectedProduct, userFilial])
 
   const addToCartProduct = (product: any, quantity: number): boolean => {
-    if (product.quantidade <= 0) {
+    const isPrevencido = !!product.is_prevencido
+    const cartKey = `${product.id_produto}_${isPrevencido ? 'prev' : 'norm'}`
+    // Prevencido tem estoque pr\u00f3prio; normal usa o total menos prevencidos reservados
+    const stockDisponivel = isPrevencido
+      ? (product.prevencido_disponivel ?? product.quantidade)
+      : product.quantidade - (product.prevencido_disponivel ?? 0)
+
+    if (stockDisponivel <= 0) {
       toast.error(`O produto ${product.descricao} não possui estoque.`)
       return false
     }
@@ -146,28 +153,31 @@ export default function PedidoVendaClient({
       return false
     }
 
-    const itemExists = cart.find(c => c.id_produto === product.id_produto)
+    const itemExists = cart.find(c => c.cart_key === cartKey)
     if (itemExists) {
-      if (itemExists.quantidade + quantity > product.quantidade) {
+      if (itemExists.quantidade + quantity > stockDisponivel) {
          toast.error(`Estoque insuficiente. Você já possui ${itemExists.quantidade} no carrinho.`)
          return false
       }
-      setCart(cart.map(c => c.id_produto === product.id_produto ? {
+      setCart(cart.map(c => c.cart_key === cartKey ? {
         ...c,
         quantidade: c.quantidade + quantity,
         subtotal: (c.quantidade + quantity) * c.preco_unitario
       } : c))
     } else {
-      if (quantity > product.quantidade) {
-         toast.error(`Estoque insuficiente. Disponível: ${product.quantidade}.`)
+      if (quantity > stockDisponivel) {
+         toast.error(`Estoque insuficiente. Disponível: ${stockDisponivel}.`)
          return false
       }
       setCart([...cart, {
+        cart_key: cartKey,
         id_produto: product.id_produto,
         descricao: product.descricao,
         quantidade: quantity,
         preco_unitario: product.preco_venda,
-        subtotal: quantity * product.preco_venda
+        subtotal: quantity * product.preco_venda,
+        is_prevencido: isPrevencido,
+        stock_disponivel: stockDisponivel,
       }])
     }
     
@@ -222,24 +232,24 @@ export default function PedidoVendaClient({
     }
   }
 
-  const removeFromCart = (id_produto: string) => {
-    setCart(cart.filter(c => c.id_produto !== id_produto))
+  const removeFromCart = (cartKey: string) => {
+    setCart(cart.filter(c => c.cart_key !== cartKey))
   }
 
-  const updateCartQty = (id_produto: string, newQty: number) => {
+  const updateCartQty = (cartKey: string, newQty: number) => {
     if (newQty <= 0) {
-      removeFromCart(id_produto)
+      removeFromCart(cartKey)
       return
     }
-    const prodRef = serverProducts.find(p => p.id_produto === id_produto) || availableProducts.find(p => p.id_produto === id_produto)
-    if (!prodRef) return
+    const cartItem = cart.find(c => c.cart_key === cartKey)
+    if (!cartItem) return
     
-    if (newQty > prodRef.quantidade) {
-      toast.error(`Estoque insuficiente. Disponível: ${prodRef.quantidade}`)
+    if (newQty > cartItem.stock_disponivel) {
+      toast.error(`Estoque insuficiente. Disponível: ${cartItem.stock_disponivel}`)
       return
     }
     
-    setCart(cart.map(c => c.id_produto === id_produto ? {
+    setCart(cart.map(c => c.cart_key === cartKey ? {
       ...c,
       quantidade: newQty,
       subtotal: newQty * c.preco_unitario
@@ -510,20 +520,28 @@ export default function PedidoVendaClient({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cart.map((item, idx) => (
-                  <TableRow key={idx}>
+                {cart.map((item) => (
+                  <TableRow key={item.cart_key}>
                     <TableCell>
                       <div className="font-medium text-[var(--color-text-main)] w-48 xl:w-64 truncate">
                         {item.descricao}
                       </div>
-                      <div className="text-xs text-[var(--color-text-muted)]">{item.id_produto}</div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-[var(--color-text-muted)]">{item.id_produto}</span>
+                        {item.is_prevencido && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-red-600 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded-full">
+                            <span className="w-1 h-1 rounded-full bg-red-500 inline-block" />
+                            Prevencido
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="w-[120px] text-right">
                       <div className="flex justify-end">
                         <div className="flex items-center rounded-lg border border-[var(--color-border)] h-8 w-24 overflow-hidden">
-                          <button type="button" onClick={() => updateCartQty(item.id_produto, item.quantidade - 1)} className="flex items-center justify-center h-full aspect-square hover:bg-black/5 active:bg-black/10 border-r border-[var(--color-border)] text-black"><Minus className="w-3 h-3" /></button>
+                          <button type="button" onClick={() => updateCartQty(item.cart_key, item.quantidade - 1)} className="flex items-center justify-center h-full aspect-square hover:bg-black/5 active:bg-black/10 border-r border-[var(--color-border)] text-black"><Minus className="w-3 h-3" /></button>
                           <div className="h-full flex-1 flex items-center justify-center text-xs font-bold">{item.quantidade}</div>
-                          <button type="button" onClick={() => updateCartQty(item.id_produto, item.quantidade + 1)} className="flex items-center justify-center h-full aspect-square hover:bg-black/5 active:bg-black/10 border-l border-[var(--color-border)] text-black"><Plus className="w-3 h-3" /></button>
+                          <button type="button" onClick={() => updateCartQty(item.cart_key, item.quantidade + 1)} className="flex items-center justify-center h-full aspect-square hover:bg-black/5 active:bg-black/10 border-l border-[var(--color-border)] text-black"><Plus className="w-3 h-3" /></button>
                         </div>
                       </div>
                     </TableCell>
@@ -534,7 +552,7 @@ export default function PedidoVendaClient({
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.subtotal)}
                     </TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.id_produto)}>
+                      <Button variant="ghost" size="icon" onClick={() => removeFromCart(item.cart_key)}>
                          <Trash2 className="w-4 h-4 text-red-500" />
                       </Button>
                     </TableCell>
