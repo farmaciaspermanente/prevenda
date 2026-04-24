@@ -117,7 +117,6 @@ export async function getMyOrders() {
 }
 
 export async function getComplementaryProduct(filial_id: string, product_description: string) {
-  console.log(`--- Sugestão Inteligente para: ${product_description} ---`)
   try {
     const supabase = await createClient()
     const apiKey = process.env.GEMINI_API_KEY
@@ -135,16 +134,14 @@ export async function getComplementaryProduct(filial_id: string, product_descrip
           return result
         } catch (err: any) {
           lastError = err
-          console.log(`Modelo ${modelName} falhou: ${err.message}`)
         }
       }
       throw lastError
     }
 
     let topProduct = null
-    let internalFound = false
 
-    // 1. BUSCA HISTÓRICA (Primeira prioridade)
+    // 1. BUSCA HISTÓRICA
     const cleanName = product_description.split(' ')[0].replace(/[^a-zA-Z]/g, '')
     const { data: recentMatches } = await supabase
       .from("itens_pedido")
@@ -168,103 +165,60 @@ export async function getComplementaryProduct(filial_id: string, product_descrip
 
         for (const pid of sortedIds) {
           const { data: inStock } = await supabase
-            .from("v_produto_filial")
-            .select("*")
-            .eq("id_filial", filial_id)
-            .eq("id_produto", pid)
-            .gt("quantidade", 0)
-            .single()
+            .from("v_produto_filial").select("*").eq("id_filial", filial_id).eq("id_produto", pid).gt("quantidade", 0).single()
           if (inStock) {
             topProduct = inStock
-            internalFound = true
-            console.log("Sugestão interna via histórico encontrada.")
             break
           }
         }
       }
     }
 
-    // 2. SE NÃO HOUVER HISTÓRICO, RECORRE AO NOVO FLUXO DA IA
+    // 2. IA (Descoberta + Busca por Preço)
     if (!topProduct) {
-      console.log("Recorrendo ao fluxo de IA (Etapa 1: Descoberta)...")
-      
       const promptKeywords = `Atue como um farmacêutico experiente focado em suporte ao tratamento e bem-estar. O cliente está levando "${product_description}".
-Sua tarefa: Sugira 3 termos de busca (marcas famosas ou categorias) que complementem este tratamento.
-
-REGRAS CRÍTICAS: 
-1. PREFERÊNCIA: Sugira Vitaminas, Suplementos Alimentares, Probióticos ou Equipamentos/Correlatos (ex: Espaçador, Termômetro, Aparelho de Pressão, Umidificador).
-2. EVITE: Medicamentos que exigem prescrição médica (tarjados). Foque em itens de venda livre que potencializem a saúde ou facilitem a administração.
-3. Evite a mesma marca de "${product_description}".
-
-Responda APENAS um JSON no formato:
-{ "sugestoes": [{"termo": "Marca ou Sal", "tipo": "produto|principio"}] }`
+Sugira 3 termos de busca (marcas ou categorias) que complementem este tratamento (Vitamins, Supplements, Equipment).
+Responda JSON: { "sugestoes": [{"termo": "Nome", "tipo": "produto|principio"}] }`
 
       const resultKeywords = await generateWithFallback(promptKeywords)
       const responseTextKw = resultKeywords.response.text().replace(/```json|```/g, '').trim()
       const suggestions = JSON.parse(responseTextKw).sugestoes || []
 
-      // PASSO 2: Buscar no banco de dados o melhor item disponível baseado nas sugestões
       for (const item of suggestions) {
         const fullKeyword = item.termo.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
         
-        // 1. Tenta encontrar primeiro um item PREVENCIDO (Vencimento próximo)
-        let queryPrev = supabase.from("v_produto_filial")
-          .select("*")
-          .eq("id_filial", filial_id)
-          .gt("prevencido_disponivel", 0)
-        
-        if (item.tipo === 'principio') {
-          queryPrev = queryPrev.ilike("produto_principio_ativo", `%${fullKeyword}%`)
-        } else {
-          queryPrev = queryPrev.ilike("produto_descricao", `%${fullKeyword}%`)
-        }
+        // BUSCA POR PREVENCIDO
+        let qPrev = supabase.from("v_produto_filial").select("*").eq("id_filial", filial_id).gt("prevencido_disponivel", 0)
+        if (item.tipo === 'principio') qPrev = qPrev.ilike("produto_principio_ativo", `%${fullKeyword}%`)
+        else qPrev = qPrev.ilike("produto_descricao", `%${fullKeyword}%`)
+        const { data: prevMatches } = await qPrev.limit(1)
 
-        const { data: prevMatches } = await queryPrev.limit(1)
-        
-        if (prevMatches && prevMatches.length > 0) {
-          topProduct = prevMatches[0]
-          console.log(`Prioridade 1 (PREVENCIDO) encontrada: ${topProduct.produto_descricao}`)
+        // BUSCA POR MARCA PROP
+        let qProp = supabase.from("v_produto_filial").select("*").eq("id_filial", filial_id).eq("produto_subgrupo", "MARCA PROP").gt("quantidade", 0)
+        if (item.tipo === 'principio') qProp = qProp.ilike("produto_principio_ativo", `%${fullKeyword}%`)
+        else qProp = qProp.ilike("produto_descricao", `%${fullKeyword}%`)
+        const { data: propMatches } = await qProp.limit(1)
+
+        const pPrev = prevMatches?.[0]
+        const pProp = propMatches?.[0]
+
+        if (pPrev || pProp) {
+          const pricePrev = pPrev ? pPrev.preco_venda * (1 - (pPrev.desconto_prevencido || 0) / 100) : Infinity
+          const priceProp = pProp ? pProp.preco_venda * (1 - (pProp.desconto_padrao || 0) / 100) : Infinity
+
+          if (pricePrev <= priceProp) topProduct = pPrev
+          else topProduct = pProp
           break
         }
 
-        // 2. Tenta encontrar um item de MARCA PRÓPRIA
-        let queryProp = supabase.from("v_produto_filial")
-          .select("*")
-          .eq("id_filial", filial_id)
-          .eq("produto_subgrupo", "MARCA PROP")
-          .gt("quantidade", 0)
-        
-        if (item.tipo === 'principio') {
-          queryProp = queryProp.ilike("produto_principio_ativo", `%${fullKeyword}%`)
-        } else {
-          queryProp = queryProp.ilike("produto_descricao", `%${fullKeyword}%`)
-        }
-
-        const { data: propMatches } = await queryProp.limit(1)
-        
-        if (propMatches && propMatches.length > 0) {
-          topProduct = propMatches[0]
-          console.log(`Prioridade 2 (MARCA PROP) encontrada: ${topProduct.produto_descricao}`)
-          break
-        }
-
-        // 3. Busca geral (Mais barato)
-        let queryGen = supabase.from("v_produto_filial")
-          .select("*")
-          .eq("id_filial", filial_id)
-          .gt("quantidade", 0)
-        
-        if (item.tipo === 'principio') {
-          queryGen = queryGen.ilike("produto_principio_ativo", `%${fullKeyword}%`)
-        } else {
-          queryGen = queryGen.ilike("produto_descricao", `%${fullKeyword}%`)
-        }
-
-        const { data: genMatches } = await queryGen.order("preco_venda", { ascending: true }).limit(1)
+        // BUSCA GERAL (Fallback)
+        let qGen = supabase.from("v_produto_filial").select("*").eq("id_filial", filial_id).gt("quantidade", 0)
+        if (item.tipo === 'principio') qGen = qGen.ilike("produto_principio_ativo", `%${fullKeyword}%`)
+        else qGen = qGen.ilike("produto_descricao", `%${fullKeyword}%`)
+        const { data: genMatches } = await qGen.order("preco_venda", { ascending: true }).limit(1)
         
         if (genMatches && genMatches.length > 0) {
           topProduct = genMatches[0]
-          console.log(`Prioridade 3 (Geral/Preço) encontrada: ${topProduct.produto_descricao}`)
           break
         }
       }
@@ -272,15 +226,22 @@ Responda APENAS um JSON no formato:
 
     if (!topProduct) return null
 
-    // 3. IA (Etapa 2): Gerar argumento de venda específico para o produto ENCONTRADO
-    console.log("Fluxo de IA (Etapa 2: Argumento de Venda)...")
-    const promptArgument = `Como farmacêutico, o cliente está levando "${product_description}" e você vai oferecer também "${topProduct.produto_descricao}".
-Crie uma frase curta (máximo 2 linhas) e persuasiva justificando por que levar este segundo item agora.
-Seja empático e técnico.`
+    // 3. IA (Argumento Assertivo)
+    const promptArgument = `Como farmacêutico especialista, o cliente está levando "${product_description}" e você vai oferecer também "${topProduct.produto_descricao}".
+Crie uma frase curta (máximo 2 linhas) justificando a oferta.
+
+REGRAS CRÍTICAS:
+1. PROIBIDO fazer perguntas. Não use interrogações.
+2. Use apenas AFIRMAÇÕES diretas e argumentos "vendedores".
+3. Justifique como o segundo item protege, complementa ou potencializa o primeiro.
+
+Exemplos de tom esperado:
+- "${product_description}" pode causar ressecamento, leve "${topProduct.produto_descricao}" para auxiliar no conforto.
+- O efeito de "${product_description}" é potencializado com o uso combinado de "${topProduct.produto_descricao}".
+- Para garantir a proteção da flora durante o uso de "${product_description}", recomendo levar "${topProduct.produto_descricao}".`
 
     const resultArg = await generateWithFallback(promptArgument)
     const argument = resultArg.response.text().trim().replace(/^"|"$/g, '')
-    console.log("Argumento gerado:", argument)
 
     const isPrevencido = topProduct.prevencido_disponivel > 0
     const precoCheio = topProduct.preco_venda
@@ -301,7 +262,6 @@ Seja empático e técnico.`
       is_prevencido: isPrevencido,
       argumento_venda: argument
     }
-
   } catch (err) {
     console.error("Erro no processo de sugestão:", err)
     return null
