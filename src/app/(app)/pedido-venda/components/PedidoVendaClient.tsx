@@ -373,6 +373,33 @@ export default function PedidoVendaClient({
               </div>
             </div>
 
+            {/* Info Cards: Valor e Estoque do produto selecionado */}
+            {selectedProductData && (
+              <>
+                <div className="mt-4 flex gap-3">
+                  <div className="flex-1 flex flex-col gap-0.5 border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-2.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Valor</span>
+                    <span className="text-base font-bold text-[var(--color-text-main)]">
+                      {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedProductData.preco_venda)}
+                    </span>
+                  </div>
+                  <div className="flex-1 flex flex-col gap-0.5 border border-[var(--color-border)] rounded-[var(--radius-md)] px-4 py-2.5">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">Estoque Disponível</span>
+                    <span className={`text-base font-bold ${selectedProductData.quantidade <= 0 ? 'text-red-500' : 'text-[var(--color-text-main)]'}`}>
+                      {selectedProductData.quantidade <= 0 ? 'Sem estoque' : `${selectedProductData.quantidade} un.`}
+                    </span>
+                    {selectedProductData.prevencido_disponivel > 0 && (
+                      <span className="mt-1 inline-flex items-center gap-1 text-[11px] font-semibold text-red-600">
+                        <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" />
+                        {selectedProductData.prevencido_disponivel} prevencido{selectedProductData.prevencido_disponivel > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-4 border-t border-dashed border-[var(--color-border)]" />
+              </>
+            )}
+
             {/* Suggestions Rendered Below the Form so it doesn't push it down */}
             {(prevencidoProduct || alternativeProduct || complementaryProduct || isAiLoading || selectedProductData?.subgrupo?.toUpperCase().includes('PBM')) && (
               <div className="mt-4 flex flex-col gap-2 w-full">
