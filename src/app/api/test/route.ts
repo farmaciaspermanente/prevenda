@@ -9,8 +9,8 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_produto_filial')
-    .select('id_produto, descricao, quantidade')
-    .eq('filial_id', filial)
+    .select('id_produto, produto_descricao, quantidade')
+    .eq('id_filial', filial)
     .or(`produto_descricao.ilike.%${q}%,produto_principio_ativo.ilike.%${q}%`)
     .limit(10);
 

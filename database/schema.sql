@@ -38,6 +38,7 @@ CREATE TABLE produtos (
     ean TEXT UNIQUE,
     descricao TEXT NOT NULL,
     principio_ativo TEXT,
+    subgrupo TEXT,
     ativo BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW())
 );
@@ -48,8 +49,30 @@ CREATE TABLE produto_filial (
     id_produto TEXT REFERENCES produtos(id) ON DELETE CASCADE,
     preco_venda NUMERIC(15, 2) NOT NULL DEFAULT 0.00,
     quantidade INTEGER NOT NULL DEFAULT 0,
+    prevencido_disponivel INTEGER DEFAULT 0,
+    desconto_prevencido NUMERIC(15, 2) DEFAULT 0.00,
+    desconto_padrao NUMERIC(15, 2) DEFAULT 0.00,
     PRIMARY KEY (id_filial, id_produto)
 );
+
+-- 1.1 Views
+CREATE OR REPLACE VIEW v_produto_filial AS
+SELECT 
+    pf.id_filial,
+    pf.id_produto,
+    pf.preco_venda,
+    pf.quantidade,
+    pf.prevencido_disponivel,
+    pf.desconto_prevencido,
+    pf.desconto_padrao,
+    p.descricao AS produto_descricao,
+    p.ean AS produto_ean,
+    p.principio_ativo AS produto_principio_ativo,
+    p.subgrupo AS produto_subgrupo,
+    f.nome AS filial_nome
+FROM produto_filial pf
+JOIN produtos p ON pf.id_produto = p.id
+JOIN filiais f ON pf.id_filial = f.id;
 
 -- Permissoes Menu
 CREATE TABLE permissoes_menu (
@@ -77,7 +100,8 @@ CREATE TABLE itens_pedido (
     produto_id TEXT REFERENCES produtos(id),
     quantidade INTEGER NOT NULL CHECK (quantidade > 0),
     preco_unitario NUMERIC(15, 2) NOT NULL,
-    subtotal NUMERIC(15, 2) NOT NULL
+    subtotal NUMERIC(15, 2) NOT NULL,
+    origem_sugestao TEXT DEFAULT 'Manual'
 );
 
 -- 2. Gatilhos / Funções para controle de Estoque
@@ -89,19 +113,35 @@ DECLARE
 BEGIN
     -- Se o pedido for Finalizado e estava Aberto
     IF NEW.status = 'Finalizado' AND OLD.status = 'Aberto' THEN
-        FOR item IN SELECT produto_id, quantidade FROM itens_pedido WHERE pedido_id = NEW.id LOOP
+        FOR item IN SELECT produto_id, quantidade, origem_sugestao FROM itens_pedido WHERE pedido_id = NEW.id LOOP
+            -- Atualiza estoque geral
             UPDATE produto_filial 
             SET quantidade = quantidade - item.quantidade
             WHERE id_produto = item.produto_id AND id_filial = NEW.filial_id;
+
+            -- Se foi venda de produto prevencido, abate também do saldo de prevencidos
+            IF item.origem_sugestao = 'Prevencido' THEN
+                UPDATE produto_filial 
+                SET prevencido_disponivel = prevencido_disponivel - item.quantidade
+                WHERE id_produto = item.produto_id AND id_filial = NEW.filial_id;
+            END IF;
         END LOOP;
     END IF;
 
     -- Se o pedido for Cancelado e estava Finalizado, devolve o estoque
     IF NEW.status = 'Cancelado' AND OLD.status = 'Finalizado' THEN
-        FOR item IN SELECT produto_id, quantidade FROM itens_pedido WHERE pedido_id = NEW.id LOOP
+        FOR item IN SELECT produto_id, quantidade, origem_sugestao FROM itens_pedido WHERE pedido_id = NEW.id LOOP
+            -- Devolve estoque geral
             UPDATE produto_filial 
             SET quantidade = quantidade + item.quantidade
             WHERE id_produto = item.produto_id AND id_filial = NEW.filial_id;
+
+            -- Se foi venda de produto prevencido, devolve também ao saldo de prevencidos
+            IF item.origem_sugestao = 'Prevencido' THEN
+                UPDATE produto_filial 
+                SET prevencido_disponivel = prevencido_disponivel + item.quantidade
+                WHERE id_produto = item.produto_id AND id_filial = NEW.filial_id;
+            END IF;
         END LOOP;
     END IF;
 

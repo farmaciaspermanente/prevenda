@@ -128,6 +128,8 @@ export default function ProdutoFilialClient({ initialData, dropdownData }: { ini
                 <TableHead>Filial</TableHead>
                 <TableHead>Produto</TableHead>
                 <TableHead className="text-right">Preço de Venda</TableHead>
+                <TableHead className="text-right">Dsc. Padrão</TableHead>
+                <TableHead className="text-right">Prevencido</TableHead>
                 <TableHead className="text-right">Estoque</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -151,6 +153,21 @@ export default function ProdutoFilialClient({ initialData, dropdownData }: { ini
                   </TableCell>
                   <TableCell className="text-right font-medium text-[var(--color-accent)]">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.preco_venda || 0)}
+                  </TableCell>
+                  <TableCell className="text-right font-medium text-blue-600">
+                    {item.desconto_padrao > 0 ? `${item.desconto_padrao}%` : "-"}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {item.prevencido_disponivel > 0 ? (
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-100 text-orange-700 uppercase">
+                          -{item.desconto_prevencido}%
+                        </span>
+                        <span className="text-[10px] text-orange-600 font-medium">{item.prevencido_disponivel} un</span>
+                      </div>
+                    ) : (
+                      <span className="text-[var(--color-text-muted)] text-xs">-</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${item.quantidade > 0 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -228,6 +245,60 @@ export default function ProdutoFilialClient({ initialData, dropdownData }: { ini
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-medium">Quantidade em Estoque</label>
                 <Input name="quantidade" type="number" step="1" defaultValue={editingItem?.quantidade || 0} required placeholder="0" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-medium text-blue-700">Desconto Padrão (%)</label>
+                <div className="relative">
+                  <Input 
+                    name="desconto_padrao" 
+                    type="number" 
+                    step="0.01" 
+                    min="0" 
+                    max="100" 
+                    defaultValue={editingItem?.desconto_padrao || 0} 
+                    className="pr-8 border-blue-200 focus-visible:ring-blue-500" 
+                    placeholder="0.00" 
+                  />
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-blue-700 font-bold">%</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-[var(--color-canvas)] p-4 rounded-[var(--radius-md)] border border-[var(--color-border)] flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <label className="text-sm font-semibold">Produto Prevencido</label>
+                  <p className="text-xs text-[var(--color-text-muted)]">Quantidade de itens próximos ao vencimento e desconto aplicado.</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium">Qtd. Disponível</label>
+                  <Input 
+                    name="prevencido_disponivel" 
+                    type="number" 
+                    min="0" 
+                    defaultValue={editingItem?.prevencido_disponivel || 0} 
+                    placeholder="0" 
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm font-medium text-orange-700">Desconto (%)</label>
+                  <div className="relative">
+                    <Input 
+                      name="desconto_prevencido" 
+                      type="number" 
+                      step="0.01" 
+                      min="0" 
+                      max="100" 
+                      defaultValue={editingItem?.desconto_prevencido || 0} 
+                      className="pr-8 border-orange-200 focus-visible:ring-orange-500" 
+                      placeholder="0.00" 
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-orange-700 font-bold">%</span>
+                  </div>
+                </div>
               </div>
             </div>
 

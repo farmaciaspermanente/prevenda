@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Search, Plus, Minus, Trash2, ShoppingCart, Check, PackageOpen } from "lucide-react"
+import { Search, Plus, Minus, Trash2, ShoppingCart, Check, PackageOpen, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
@@ -379,15 +379,31 @@ export default function PedidoVendaClient({
                 )}
                 
                 {(!isAiLoading && complementaryProduct) && (
-                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-[var(--radius-md)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 animate-in fade-in slide-in-from-top-2 border-dashed shadow-sm">
+                  <div className={`p-3 border rounded-[var(--radius-md)] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 animate-in fade-in slide-in-from-top-2 border-dashed shadow-sm ${complementaryProduct.is_prevencido ? 'bg-orange-50 border-orange-200' : 'bg-orange-50 border-orange-200'}`}>
                     <div className="flex flex-col flex-1 pb-2 sm:pb-0">
-                      <span className="text-xs font-bold text-orange-700 uppercase tracking-wider flex items-center gap-1">
-                        🔥 Leve Também (IA Farmacêutica)
+                      <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1 ${complementaryProduct.is_prevencido ? 'text-orange-600' : 'text-orange-700'}`}>
+                        {complementaryProduct.is_prevencido ? (
+                          <><Sparkles className="w-3 h-3" /> Oferta Especial: Vencimento Próximo</>
+                        ) : (
+                          <><Sparkles className="w-3 h-3" /> Leve Também (IA Farmacêutica)</>
+                        )}
                       </span>
                       <span className="text-sm font-medium text-orange-900 line-clamp-1">{complementaryProduct.descricao}</span>
+                      
+                      {complementaryProduct.is_prevencido ? (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-xs text-orange-700/60 line-through">
+                            {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(complementaryProduct.preco_cheio)}
+                          </span>
+                          <span className="text-xs font-bold text-orange-600 bg-orange-100 px-1.5 py-0.5 rounded">
+                            -{complementaryProduct.desconto_aplicado}% OFF
+                          </span>
+                        </div>
+                      ) : null}
+
                       <span className="text-xs text-orange-800 mt-1 italic font-medium leading-tight max-w-[500px]">"{complementaryProduct.argumento_venda}"</span>
                     </div>
-                    <Button type="button" size="sm" onClick={handleSelectComplementary} className="bg-orange-500 hover:bg-orange-600 text-white border-none h-8 px-4 text-xs font-semibold rounded-full shadow-sm shrink-0">
+                    <Button type="button" size="sm" onClick={handleSelectComplementary} className={`${complementaryProduct.is_prevencido ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-500 hover:bg-orange-600'} text-white border-none h-8 px-4 text-xs font-semibold rounded-full shadow-sm shrink-0`}>
                       Adicionar por {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(complementaryProduct.preco_venda)}
                     </Button>
                   </div>

@@ -60,25 +60,30 @@ export function Topbar({ userProfile }: { userProfile: { nome: string; role: str
         
         <div className="pl-4 border-l border-[var(--color-border)]">
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-3 hover:bg-[var(--color-canvas)] p-1.5 rounded-xl transition-colors outline-none group text-right">
-              <div className="flex flex-col items-end">
-                <span className="text-sm font-medium leading-none text-[var(--color-text-main)]">{userProfile.nome}</span>
-                <span className="text-[10px] text-[var(--color-text-muted)] mt-1 capitalize font-medium">{userProfile.role} {userProfile.filial_id ? `(${userProfile.filial_id})` : ''}</span>
-              </div>
-              <div className="w-9 h-9 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] group-hover:border-[var(--color-accent)] transition-colors">
-                <User className="w-5 h-5" />
-              </div>
-              <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)]" />
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-3 hover:bg-[var(--color-canvas)] p-1.5 rounded-xl transition-colors outline-none group text-right">
+                <div className="flex flex-col items-end">
+                  <span className="text-sm font-medium leading-none text-[var(--color-text-main)]">{userProfile.nome}</span>
+                  <span className="text-[10px] text-[var(--color-text-muted)] mt-1 capitalize font-medium">{userProfile.role} {userProfile.filial_id ? `(${userProfile.filial_id})` : ''}</span>
+                </div>
+                <div className="w-9 h-9 rounded-full bg-[var(--color-canvas)] border border-[var(--color-border)] flex items-center justify-center text-[var(--color-text-muted)] group-hover:border-[var(--color-accent)] transition-colors">
+                  <User className="w-5 h-5" />
+                </div>
+                <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)] group-hover:text-[var(--color-accent)]" />
+              </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end">
               <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsPasswordModalOpen(true)}>
+              <DropdownMenuItem onSelect={(e) => {
+                e.preventDefault()
+                setIsPasswordModalOpen(true)
+              }}>
                 <KeyRound className="w-4 h-4" />
                 <span>Alterar Senha</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-red-500 focus:text-red-500 focus:bg-red-50">
+              <DropdownMenuItem onSelect={handleLogout} className="text-red-500 focus:text-red-500 focus:bg-red-50">
                 <LogOut className="w-4 h-4" />
                 <span>Sair</span>
               </DropdownMenuItem>

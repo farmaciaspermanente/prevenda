@@ -16,8 +16,8 @@ export default async function PedidoVendaPage() {
 
   const filial_id = profile?.filial_id || undefined
 
-  let products = []
-  let recentOrders = []
+  let products: any[] = []
+  let recentOrders: any[] = []
 
   if (filial_id) {
     products = await getBranchProducts(filial_id)

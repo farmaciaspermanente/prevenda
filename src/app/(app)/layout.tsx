@@ -28,6 +28,7 @@ export default async function AppRouteLayout({
     allowedMenus = [
       "/", 
       "/pedido-venda", 
+      "/dashboard-vendas",
       "/cadastros/filiais", 
       "/cadastros/produtos", 
       "/cadastros/produto-filial", 

@@ -10,7 +10,8 @@ import {
   Store, 
   Package, 
   Link as LinkIcon, 
-  Settings 
+  Settings,
+  BarChart3
 } from "lucide-react"
 import { Logo } from "@/components/ui/Logo"
 
@@ -24,6 +25,7 @@ interface SidebarProps {
 const MENU_ITEMS = [
   { href: "/", label: "Home", icon: Home },
   { href: "/pedido-venda", label: "Pedido de Venda", icon: ShoppingCart },
+  { href: "/dashboard-vendas", label: "Dashboard de Vendas", icon: BarChart3 },
   { href: "/cadastros/filiais", label: "Cadastro de Filial", icon: Store },
   { href: "/cadastros/produtos", label: "Cadastro de Produtos", icon: Package },
   { href: "/cadastros/produto-filial", label: "Produto Filial", icon: LinkIcon },

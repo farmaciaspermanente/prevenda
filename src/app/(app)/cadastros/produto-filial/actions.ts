@@ -10,24 +10,29 @@ export async function getProdutoFilial(searchQuery?: string, idFilial?: string) 
     .from("v_produto_filial")
     .select("*")
     .order("id_filial")
+    .limit(100) // LIMIT ADICIONADO PARA PREVENIR TRAVAMENTO DO NAVEGADOR
 
   if (idFilial && idFilial !== "") {
     query = query.eq("id_filial", idFilial)
   }
 
-  if (searchQuery) {
-    query = query.or(`id_produto.ilike.%${searchQuery}%,id_filial.ilike.%${searchQuery}%,produto_descricao.ilike.%${searchQuery}%,produto_ean.ilike.%${searchQuery}%,produto_principio_ativo.ilike.%${searchQuery}%,filial_nome.ilike.%${searchQuery}%`)
+  if (searchQuery && searchQuery.trim()) {
+    const term = searchQuery.trim()
+    query = query.or(`id_produto.ilike.%${term}%,id_filial.ilike.%${term}%,produto_descricao.ilike.%${term}%,produto_ean.ilike.%${term}%,produto_principio_ativo.ilike.%${term}%,filial_nome.ilike.%${term}%`)
   }
 
   const { data, error } = await query
   
   if (error) {
-    console.error("Erro ao buscar produto filial", error)
+    console.error("Erro ao buscar produto filial:", error.message, error.details)
     return []
   }
 
+  if (!data) return []
+
   // Ordenação numérica por ID da filial
-  return data.sort((a: any, b: any) => {
+  const sortedData = [...data]
+  return sortedData.sort((a: any, b: any) => {
     const idA = parseInt(a.id_filial, 10)
     const idB = parseInt(b.id_filial, 10)
     if (!isNaN(idA) && !isNaN(idB)) return idA - idB
@@ -38,11 +43,11 @@ export async function getProdutoFilial(searchQuery?: string, idFilial?: string) 
 export async function getDropdownData() {
   const supabase = await createClient()
   
-  const { data: filiais } = await supabase.from("filiais").select("id, nome, ativo").eq('ativo', true)
-  const { data: produtos } = await supabase.from("produtos").select("id, descricao, ean, principio_ativo, ativo").eq('ativo', true).order("descricao")
+  const { data: filiais } = await supabase.from("filiais").select("id, nome, ativo").eq('ativo', true).limit(500)
+  const { data: produtos } = await supabase.from("produtos").select("id, descricao, ean, principio_ativo, ativo").eq('ativo', true).order("descricao").limit(1000)
   
   // Ordenação numérica por ID
-  const sortedFiliais = (filiais || []).sort((a: any, b: any) => {
+  const sortedFiliais = [...(filiais || [])].sort((a: any, b: any) => {
     const idA = parseInt(a.id, 10)
     const idB = parseInt(b.id, 10)
     if (!isNaN(idA) && !isNaN(idB)) return idA - idB
@@ -62,6 +67,9 @@ export async function upsertProdutoFilial(formData: FormData) {
   const id_produto = formData.get("id_produto") as string
   const preco_venda = parseFloat(formData.get("preco_venda") as string)
   const quantidade = parseInt(formData.get("quantidade") as string, 10)
+  const prevencido_disponivel = parseInt(formData.get("prevencido_disponivel") as string || "0", 10)
+  const desconto_prevencido = parseFloat(formData.get("desconto_prevencido") as string || "0")
+  const desconto_padrao = parseFloat(formData.get("desconto_padrao") as string || "0")
   const isEdit = formData.get("isEdit") === "true"
 
   if (!id_filial || !id_produto || isNaN(preco_venda) || isNaN(quantidade)) {
@@ -72,7 +80,7 @@ export async function upsertProdutoFilial(formData: FormData) {
     if (isEdit) {
       const { error } = await supabase
         .from("produto_filial")
-        .update({ preco_venda, quantidade })
+        .update({ preco_venda, quantidade, prevencido_disponivel, desconto_prevencido, desconto_padrao })
         .eq("id_filial", id_filial)
         .eq("id_produto", id_produto)
         
@@ -92,7 +100,7 @@ export async function upsertProdutoFilial(formData: FormData) {
 
       const { error } = await supabase
         .from("produto_filial")
-        .insert({ id_filial, id_produto, preco_venda, quantidade })
+        .insert({ id_filial, id_produto, preco_venda, quantidade, prevencido_disponivel, desconto_prevencido, desconto_padrao })
         
       if (error) throw error
     }
