@@ -116,7 +116,7 @@ export async function getMyOrders() {
   return data || []
 }
 
-export async function getComplementaryProduct(filial_id: string, product_description: string) {
+export async function getComplementaryProduct(filial_id: string, product_description: string, base_product_id?: string) {
   try {
     const supabase = await createClient()
     const apiKey = process.env.GEMINI_API_KEY
@@ -141,13 +141,26 @@ export async function getComplementaryProduct(filial_id: string, product_descrip
 
     let topProduct = null
 
+    // 0. BUSCAR REJEIÇÕES
+    let ignoredIds: string[] = []
+    if (base_product_id) {
+      const { data: rejectedData } = await supabase
+        .from('ai_feedbacks')
+        .select('suggested_product_id')
+        .eq('base_product_id', base_product_id)
+        .gte('rejections', 3)
+      if (rejectedData) {
+        ignoredIds = rejectedData.map(r => r.suggested_product_id)
+      }
+    }
+
     // 1. BUSCA HISTÓRICA
     const cleanName = product_description.split(' ')[0].replace(/[^a-zA-Z]/g, '')
     const { data: recentMatches } = await supabase
       .from("itens_pedido")
       .select("pedido_id")
       .ilike("produto_descricao", `%${cleanName}%`)
-      .limit(10)
+      .limit(30)
 
     if (recentMatches && recentMatches.length > 0) {
       const orderIds = recentMatches.map(m => m.pedido_id)
@@ -156,14 +169,18 @@ export async function getComplementaryProduct(filial_id: string, product_descrip
         .select("produto_id, produto_descricao")
         .in("pedido_id", orderIds)
         .not("produto_descricao", "ilike", `%${cleanName}%`)
-        .limit(20)
+        .limit(60)
 
       if (historicalItems && historicalItems.length > 0) {
         const counts: Record<string, number> = {}
         historicalItems.forEach(item => { counts[item.produto_id] = (counts[item.produto_id] || 0) + 1 })
+        // Se teve venda relevante (neste caso, se apareceu nos itens históricos), não ignora
+        ignoredIds = ignoredIds.filter(id => (counts[id] || 0) === 0)
+
         const sortedIds = Object.keys(counts).sort((a, b) => counts[b] - counts[a])
 
         for (const pid of sortedIds) {
+          if (ignoredIds.includes(pid)) continue;
           const { data: inStock } = await supabase
             .from("v_produto_filial").select("*").eq("id_filial", filial_id).eq("id_produto", pid).gt("quantidade", 0).single()
           if (inStock) {
@@ -191,12 +208,14 @@ Responda JSON: { "sugestoes": [{"termo": "Nome", "tipo": "produto|principio"}] }
         let qPrev = supabase.from("v_produto_filial").select("*").eq("id_filial", filial_id).gt("prevencido_disponivel", 0)
         if (item.tipo === 'principio') qPrev = qPrev.ilike("produto_principio_ativo", `%${fullKeyword}%`)
         else qPrev = qPrev.ilike("produto_descricao", `%${fullKeyword}%`)
+        if (ignoredIds.length > 0) qPrev = qPrev.not("id_produto", "in", `(${ignoredIds.join(',')})`)
         const { data: prevMatches } = await qPrev.limit(1)
 
         // BUSCA POR MARCA PROP
         let qProp = supabase.from("v_produto_filial").select("*").eq("id_filial", filial_id).eq("produto_subgrupo", "MARCA PROP").gt("quantidade", 0)
         if (item.tipo === 'principio') qProp = qProp.ilike("produto_principio_ativo", `%${fullKeyword}%`)
         else qProp = qProp.ilike("produto_descricao", `%${fullKeyword}%`)
+        if (ignoredIds.length > 0) qProp = qProp.not("id_produto", "in", `(${ignoredIds.join(',')})`)
         const { data: propMatches } = await qProp.limit(1)
 
         const pPrev = prevMatches?.[0]
@@ -215,6 +234,7 @@ Responda JSON: { "sugestoes": [{"termo": "Nome", "tipo": "produto|principio"}] }
         let qGen = supabase.from("v_produto_filial").select("*").eq("id_filial", filial_id).gt("quantidade", 0)
         if (item.tipo === 'principio') qGen = qGen.ilike("produto_principio_ativo", `%${fullKeyword}%`)
         else qGen = qGen.ilike("produto_descricao", `%${fullKeyword}%`)
+        if (ignoredIds.length > 0) qGen = qGen.not("id_produto", "in", `(${ignoredIds.join(',')})`)
         const { data: genMatches } = await qGen.order("preco_venda", { ascending: true }).limit(1)
         
         if (genMatches && genMatches.length > 0) {
@@ -265,5 +285,38 @@ Exemplos de tom esperado:
   } catch (err) {
     console.error("Erro no processo de sugestão:", err)
     return null
+  }
+}
+
+export async function rejectSuggestion(base_product_id: string, suggested_product_id: string) {
+  try {
+    const supabase = await createClient()
+    
+    const { data: existing } = await supabase
+      .from('ai_feedbacks')
+      .select('rejections')
+      .eq('base_product_id', base_product_id)
+      .eq('suggested_product_id', suggested_product_id)
+      .single()
+
+    if (existing) {
+      await supabase
+        .from('ai_feedbacks')
+        .update({ rejections: existing.rejections + 1, updated_at: new Date().toISOString() })
+        .eq('base_product_id', base_product_id)
+        .eq('suggested_product_id', suggested_product_id)
+    } else {
+      await supabase
+        .from('ai_feedbacks')
+        .insert({
+          base_product_id,
+          suggested_product_id,
+          rejections: 1
+        })
+    }
+    return { success: true }
+  } catch (error) {
+    console.error("Erro ao rejeitar sugestão:", error)
+    return { success: false }
   }
 }

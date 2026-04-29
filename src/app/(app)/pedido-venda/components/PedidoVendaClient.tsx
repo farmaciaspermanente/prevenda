@@ -1,13 +1,13 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { Search, Plus, Minus, Trash2, ShoppingCart, Check, PackageOpen, Sparkles } from "lucide-react"
+import { Search, Plus, Minus, Trash2, ShoppingCart, Check, PackageOpen, Sparkles, ThumbsDown } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/Button"
 import { Input } from "@/components/ui/Input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/Table"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card"
-import { saveOrder, getBranchProducts, getCheapestAlternative, getComplementaryProduct } from "../actions"
+import { saveOrder, getBranchProducts, getCheapestAlternative, getComplementaryProduct, rejectSuggestion } from "../actions"
 
 export default function PedidoVendaClient({ 
   availableProducts, 
@@ -102,7 +102,7 @@ export default function PedidoVendaClient({
 
         // Sugestão Gemini
         promises.push((async () => {
-          const comp = await getComplementaryProduct(userFilial, currentProd.descricao)
+          const comp = await getComplementaryProduct(userFilial, currentProd.descricao, currentProd.id_produto)
           setComplementaryProduct(comp)
         })())
 
@@ -207,6 +207,17 @@ export default function PedidoVendaClient({
     if (success) {
       setComplementaryProduct(null)
     }
+  }
+
+  const handleRejectSuggestion = async () => {
+    if (!selectedProductData || !complementaryProduct) return
+    
+    // Optimistic UI update
+    const rejectedDesc = complementaryProduct.descricao
+    setComplementaryProduct(null)
+    toast.success(`Feedback enviado! A IA aprenderá a não sugerir "${rejectedDesc}" neste contexto.`)
+    
+    await rejectSuggestion(selectedProductData.id_produto, complementaryProduct.id_produto)
   }
 
   const handleClear = () => {
@@ -493,9 +504,14 @@ export default function PedidoVendaClient({
 
                       <span className="text-xs text-orange-800 mt-1 italic font-medium leading-tight max-w-[500px]">"{complementaryProduct.argumento_venda}"</span>
                     </div>
-                    <Button type="button" size="sm" onClick={handleSelectComplementary} className={`${complementaryProduct.is_prevencido ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-500 hover:bg-orange-600'} text-white border-none h-8 px-4 text-xs font-semibold rounded-full shadow-sm shrink-0`}>
-                      Adicionar por {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(complementaryProduct.preco_venda)}
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Button variant="ghost" size="icon" onClick={handleRejectSuggestion} className="h-8 w-8 text-orange-700/50 hover:text-red-600 hover:bg-red-50 rounded-full" title="Sugestão não útil">
+                         <ThumbsDown className="w-4 h-4" />
+                      </Button>
+                      <Button type="button" size="sm" onClick={handleSelectComplementary} className={`${complementaryProduct.is_prevencido ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-500 hover:bg-orange-600'} text-white border-none h-8 px-4 text-xs font-semibold rounded-full shadow-sm`}>
+                        Adicionar por {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(complementaryProduct.preco_venda)}
+                      </Button>
+                    </div>
                   </div>
                 )}
               </div>
