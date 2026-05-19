@@ -193,9 +193,15 @@ export async function getComplementaryProduct(filial_id: string, product_descrip
 
     // 2. IA (Descoberta + Busca por Preço)
     if (!topProduct) {
-      const promptKeywords = `Atue como um farmacêutico experiente focado em suporte ao tratamento e bem-estar. O cliente está levando "${product_description}".
-Sugira 3 termos de busca (marcas ou categorias) que complementem este tratamento (Vitamins, Supplements, Equipment).
-Responda JSON: { "sugestoes": [{"termo": "Nome", "tipo": "produto|principio"}] }`
+      const promptKeywords = `Atue como um farmacêutico experiente. O cliente está levando o medicamento "${product_description}".
+Sua tarefa é sugerir 3 princípios ativos ou nomes de produtos que sejam EXCELENTES COMPLEMENTOS para o tratamento, visando bem-estar, proteção ou sinergia. 
+Exemplos de complementos:
+- Para antibióticos: probióticos (ex: Repoflor, Floratil).
+- Para anti-inflamatórios: protetores gástricos (ex: Omeprazol, Pantoprazol) ou relaxantes musculares.
+- Para gripes/resfriados: Vitamina C, Zinco, pastilhas.
+
+NÃO sugira o mesmo princípio ativo do medicamento principal. Não sugira categorias amplas (ex: "Analgésicos", "Anti-inflamatórios"), sugira nomes específicos de princípios ativos ou produtos.
+Responda APENAS um JSON: { "sugestoes": [{"termo": "NomeCurto", "tipo": "produto|principio"}] }`
 
       const resultKeywords = await generateWithFallback(promptKeywords)
       const responseTextKw = resultKeywords.response.text().replace(/```json|```/g, '').trim()
